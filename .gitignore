@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ambientes Virtuais (Pasta onde ficam as libs)
+venv/
+env/
+.env
+
+# Distribuição / Build
+build/
+dist/
+*.egg-info/
+
+# Streamlit
+.streamlit/
+
+# IDEs (Configurações do VS Code ou PyCharm)
+.vscode/
+.idea/
+
+# Arquivos de Dados Temporários (Para não pesar o GitHub)
+data/*.csv
+data/*.json
+*.log
+*.tmp
+
+# Mac OS
+.DS_Store

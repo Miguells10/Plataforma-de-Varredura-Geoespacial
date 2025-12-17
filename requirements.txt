@@ -1,0 +1,23 @@
+# Framework da Aplicação (Site)
+streamlit-folium==0.17.0
+folium==0.15.1
+
+# Manipulação de Dados
+pandas==2.2.0
+numpy==1.26.0
+
+# Conexão com APIs e Internet
+requests==2.31.0
+
+# Variáveis de Ambiente (Para esconder as senhas/Keys)
+python-dotenv==1.0.0
+
+#Processamento de Imagem (Para a IA)
+Pillow==11.3.0
+shapely==2.0.2
+opencv-python-headless==4.9.0.80
+streamlit==1.41.0
+
+# Gráficos
+plotly==5.18.0
+
