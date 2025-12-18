@@ -1,57 +1,37 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import cv2
+import time
 
-# Importações dos Componentes
-from src.ui.components.styles import apply_custom_styles
 from src.ui.components.sidebar import render_sidebar
 from src.ui.map_view import render_map_component
 from src.ui.components.result_view import render_results_view
+from src.ui.components.styles import apply_custom_styles
 
-# Serviços
 from src.services.building_service import buscar_edificacoes_raio
-from src.services.satellite_service import analisar_imagem_telhado, baixar_imagem_satelite
-
-# NOVOS IMPORTS (Para H3 e Filtragem Espacial)
-from src.utils.processing import gerar_malha_hexagonal
-from src.services.osm_service import filtrar_pontos_em_ruas
-
-
-# Função auxiliar para o Laboratório de IA (Debug visual rápido)
-def testar_calibracao_debug(img_pil, hsv_lower, hsv_upper):
-    img = np.array(img_pil)
-    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, np.array(hsv_lower), np.array(hsv_upper))
-    return mask
+from src.utils.processing import prepare_scan_data
+from src.services.satellite_service import analisar_imagem_telhado
 
 
 def render_dashboard():
-    # 1. Aplica Estilos
+    # 1. Configuração Inicial
     apply_custom_styles()
 
-    # 2. Inicializa Estado
     if 'map_center' not in st.session_state: st.session_state['map_center'] = [-10.9472, -37.0731]
-    if 'map_zoom' not in st.session_state: st.session_state['map_zoom'] = 15
-    if 'subestacoes' not in st.session_state: st.session_state['subestacoes'] = pd.DataFrame()
     if 'pontos_analise' not in st.session_state: st.session_state['pontos_analise'] = []
     if 'resultados_ia' not in st.session_state: st.session_state['resultados_ia'] = []
+    if 'subestacoes' not in st.session_state: st.session_state['subestacoes'] = pd.DataFrame()
 
-    # 3. Renderiza Sidebar e pega parâmetros
     modo_varredura, calib_params = render_sidebar()
 
-    # 4. Abas Principais
-    tab1, tab2 = st.tabs(["🗺️ Mapa & Scanner", "🧪 Laboratório de IA"])
+    # 3. Layout Principal
+    tab1, tab2 = st.tabs(["🗺️ Operação & Mapa", "⚙️ Laboratório IA"])
 
-    # --- ABA 1: OPERAÇÃO ---
     with tab1:
         # Mapa
         df_mapa = pd.DataFrame(st.session_state['pontos_analise']) if st.session_state['pontos_analise'] else None
-
         render_map_component(
             st.session_state['map_center'],
-            st.session_state['map_zoom'],
+            16,
             st.session_state['subestacoes'],
             df_mapa
         )
@@ -59,107 +39,105 @@ def render_dashboard():
         # Controles de Scan
         df_subs = st.session_state['subestacoes']
         if not df_subs.empty:
+            st.divider()
             col1, col2 = st.columns([3, 1])
-            escolha = col1.selectbox("Selecione Ativo:", df_subs['Nome'].unique())
+            escolha = col1.selectbox("Selecione o Ativo:", df_subs['Nome'].unique())
 
-            if col2.button("INICIAR SCAN INTELIGENTE", type="primary"):
+            if col2.button("INICIAR SCAN", type="primary", use_container_width=True):
+                # Pega coordenada do alvo
                 alvo = df_subs[df_subs['Nome'] == escolha].iloc[0]
-                pontos = []
+                lat_alvo, lon_alvo = alvo['latitude'], alvo['longitude']
 
-                # --- ESTRATÉGIA DE BUSCA ---
-
-                # MODO 1: Busca Exata (Se o OSM tiver os dados)
+                # --- PASSO 1: Busca Edificações (Ou Mock) ---
+                casas_df = pd.DataFrame()
                 if modo_varredura == "Edificações (OSM)":
-                    with st.spinner("Buscando polígonos de edificações (OSM)..."):
-                        df_casas = buscar_edificacoes_raio(alvo['latitude'], alvo['longitude'], raio_km=0.3)
-                        for _, casa in df_casas.iterrows():
-                            pontos.append({
-                                'latitude': casa['centro_lat'],
-                                'longitude': casa['centro_lon'],
-                                'geometria': casa['geometria'],  # Desenha a casa exata
-                                'area': casa['area_m2']
-                            })
+                    with st.spinner("Obtendo dados de edificações..."):
+                        casas_df = buscar_edificacoes_raio(lat_alvo, lon_alvo, radius_km=0.3)
 
-                # MODO 2: Busca Híbrida (H3 + Spatial Join)
-                else:
-                    st.toast("Iniciando Protocolo H3...")
+                with st.spinner("Calculando malha de varredura..."):
+                    lista_casas = casas_df.to_dict('records') if not casas_df.empty else []
 
-                    # Passo A: Gerar Malha Hexagonal
-                    with st.spinner("Gerando Malha Espacial H3 (Resolução 11)..."):
-                        # Resolução 11 (~25m) é ideal para capturar lotes individuais
-                        pontos_h3 = gerar_malha_hexagonal(alvo['latitude'], alvo['longitude'], raio_km=0.3,
-                                                          resolucao=11)
+                    points = prepare_scan_data(
+                        lat_alvo, lon_alvo,
+                        buildings=lista_casas,
+                        radius_km=0.3,
+                        use_buildings=(modo_varredura == "Edificações (OSM)")
+                    )
 
-                    # Passo B: Filtragem de Ruas (Spatial Join)
-                    with st.spinner(f"Otimizando: Filtrando áreas públicas em {len(pontos_h3)} hexágonos..."):
-                        pontos_filtrados = filtrar_pontos_em_ruas(pontos_h3)
+                st.session_state['pontos_analise'] = points
 
-                        removidos = len(pontos_h3) - len(pontos_filtrados)
-                        if removidos > 0:
-                            st.toast(f"📉 Otimização: {removidos} pontos em ruas foram removidos.")
-
-                        # Padroniza para o mapa desenhar
-                        for pt in pontos_filtrados:
-                            # O H3 retorna 'geometria_hex', mas o mapa espera 'geometria'
-                            pt['geometria'] = pt.get('geometria_hex')
-                            pt['area'] = 0  # Grid não tem área real de telhado conhecida ainda
-                            pontos.append(pt)
-
-                st.session_state['pontos_analise'] = pontos
-
-                # --- PROCESSAMENTO VISUAL ---
-                if pontos:
+                if points:
                     resultados = []
-                    prog = st.progress(0)
+                    progresso = st.progress(0)
+                    status = st.empty()
 
-                    # Limite de segurança para demonstração (evitar travar a API do Google)
-                    amostra = pontos[:20]
+                    amostra = points[:20]
 
                     for i, pt in enumerate(amostra):
-                        # Chama a IA (que agora aceita a calibração do slider)
-                        img_final, ratio, tem_gd = analisar_imagem_telhado(
+                        status.text(f"Analisando alvo {i + 1}/{len(amostra)}...")
+
+                        img, ratio, tem_gd = analisar_imagem_telhado(
                             pt['latitude'],
                             pt['longitude'],
                             hsv_config=calib_params
                         )
 
-                        if img_final:
+                        if img:
                             resultados.append({
-                                'img': img_final,
+                                'img': img,
                                 'lat': pt['latitude'],
                                 'tem_gd': tem_gd
                             })
-                        prog.progress((i + 1) / len(amostra))
+
+                        progresso.progress((i + 1) / len(amostra))
+                        time.sleep(0.1)
 
                     st.session_state['resultados_ia'] = resultados
+                    st.success("Varredura Completa!")
                     st.rerun()
                 else:
-                    st.warning("Nenhum ponto viável encontrado. Tente aumentar o raio ou mudar a área.")
+                    st.error("Nenhum ponto gerado para varredura.")
 
-        # Renderiza Relatório Final
+        # Resultados
         if st.session_state['resultados_ia']:
             render_results_view(st.session_state['resultados_ia'], raio_km=0.3)
 
-    # --- ABA 2: LABORATÓRIO DE IA (CALIBRAÇÃO) ---
     with tab2:
-        st.info("Ajuste os sliders laterais para 'ensinar' a IA a ver os painéis.")
+        st.header("🔬 Laboratório de Visão Computacional")
 
         if st.session_state['resultados_ia']:
-            sel_idx = st.selectbox("Selecione uma imagem:", range(len(st.session_state['resultados_ia'])))
-            item = st.session_state['resultados_ia'][sel_idx]
 
-            # Recalcula a máscara em tempo real usando os sliders atuais
-            mask_debug = testar_calibracao_debug(item['img'], calib_params[0], calib_params[1])
+            opcoes_img = [f"Imagem {i + 1} (Lat: {r['lat']:.5f})" for i, r in
+                          enumerate(st.session_state['resultados_ia'])]
+            escolha = st.selectbox("Selecione uma imagem do Scan:", options=opcoes_img)
 
-            c1, c2 = st.columns(2)
-            c1.image(item['img'], caption="Visão Humana (Original)", use_container_width=True)
-            c2.image(mask_debug, caption="Visão da Máquina (Filtro)", use_container_width=True)
+            # Pega o índice da escolha
+            idx = opcoes_img.index(escolha)
+            dados_escolhidos = st.session_state['resultados_ia'][idx]
 
-            st.markdown("""
-            **Guia de Calibração:**
-            * **Branco** = O que a IA detecta como Painel.
-            * **Preto** = O que a IA ignora.
-            * Ajuste até que o painel solar fique branco e o telhado/chão fiquem pretos.
-            """)
+            # Mostra a imagem
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.image(dados_escolhidos['img'], caption="Imagem Processada pela IA", use_container_width=True)
+
+            with col_b:
+                st.info("Status da Detecção:")
+                if dados_escolhidos['tem_gd']:
+                    st.success("✅ GD Detectada (Textura de Painel encontrada)")
+                else:
+                    st.warning("🔸 Nenhuma GD confirmada (Área lisa ou formato irregular)")
+
+                st.markdown("**Por que a IA decidiu isso?**")
+                st.text(
+                    "O algoritmo analisou:\n1. Formato (Retangular)\n2. Textura (Linhas internas)\n3. Contraste (Escuro vs Claro)")
+
         else:
-            st.warning("Execute um Scan na primeira aba para carregar imagens aqui.")
+            st.info("⚠️ O Laboratório está vazio.")
+            st.markdown("""
+            **Como usar:**
+            1. Vá na aba 'Operação & Mapa'.
+            2. Selecione uma subestação.
+            3. Clique em **INICIAR SCAN**.
+            4. Espere o processamento terminar.
+            5. Volte aqui para analisar os resultados detalhados.
+            """)

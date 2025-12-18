@@ -1,45 +1,77 @@
-import h3
-import geopandas as gpd
-from shapely.geometry import Point, Polygon, box
-import pandas as pd
-import numpy as np
+import math
+import random
 
 
-def gerar_malha_hexagonal(lat_centro, lon_centro, raio_km=0.5, resolucao=10):
-    """
-    Gera uma malha H3 (Hexágonos) circular ao redor de um ponto.
-    Resolução 10 = Hexágonos de ~66m de lado (ideal para quarteirões/lotes).
-    Resolução 11 = Hexágonos de ~25m (ideal para casas individuais).
-    """
-    # 1. Cria um Buffer Circular usando GeoPandas (mais preciso que conta de padaria)
-    # Criamos um ponto e projetamos para metros (EPSG:3857) para fazer o buffer em Km
-    df_ponto = gpd.GeoDataFrame(geometry=[Point(lon_centro, lat_centro)], crs="EPSG:4326")
-    df_metro = df_ponto.to_crs(epsg=3857)
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """Calcula distância em km entre dois pontos."""
+    R = 6371
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return R * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
 
-    # Gera o circulo (raio em metros)
-    buffer_metro = df_metro.buffer(raio_km * 1000)
 
-    # Volta para Lat/Lon (O H3 precisa disso)
-    buffer_geo = buffer_metro.to_crs(epsg=4326).iloc[0]
+def generate_grid_points(center_lat, center_lon, radius_km=0.5, spacing_meters=30):
+    """Gera grid matemático simples (sem H3)."""
+    points = []
+    try:
+        # 1 grau lat ~ 111km
+        lat_step = (spacing_meters / 1000.0) / 111.0
+        lon_step = (spacing_meters / 1000.0) / (111.0 * math.cos(math.radians(center_lat)))
 
-    # 2. Preenche o polígono com Hexágonos (Polyfill)
-    # A lib h3 precisa do formato GeoJSON {type: Polygon, coordinates: [...]}
-    mapping = buffer_geo.__geo_interface__
+        num_steps = int(radius_km / (spacing_meters / 1000.0))
 
-    # O H3 trabalha com coordenadas (lat, lon), o GeoJSON é (lon, lat). Precisamos inverter se necessário.
-    # Mas a lib 'h3' moderna aceita bem. Vamos usar a função 'polyfill_geojson'
-    hexagons = h3.polyfill(mapping, res=resolucao, geo_json_conformant=True)
+        for i in range(-num_steps, num_steps + 1):
+            for j in range(-num_steps, num_steps + 1):
+                lat = center_lat + i * lat_step
+                lon = center_lon + j * lon_step
+                if haversine_distance(center_lat, center_lon, lat, lon) <= radius_km:
+                    points.append({
+                        'latitude': lat,
+                        'longitude': lon,
+                        'type': 'grid',
+                        'geometria': []
+                    })
+        return points
+    except Exception as e:
+        print(f"Erro grid: {e}")
+        return []
 
-    # 3. Extrai os Centroides para buscar a imagem
-    pontos_analise = []
-    for hex_id in hexagons:
-        lat, lon = h3.h3_to_geo(hex_id)
-        pontos_analise.append({
-            'id': hex_id,
-            'latitude': lat,
-            'longitude': lon,
-            'tipo': 'h3_hex',
-            'geometria_hex': h3.h3_to_geo_boundary(hex_id, geo_json=True)  # Para desenhar no mapa
-        })
 
-    return pontos_analise
+def prepare_scan_data(center_lat, center_lon, buildings=[], radius_km=0.5, use_buildings=True):
+    """Prepara a lista final de pontos para o scan."""
+    final_points = []
+
+    if use_buildings and buildings:
+        print(f"Usando {len(buildings)} edificações...")
+        for b in buildings:
+            # Tenta pegar o centro de várias formas
+            lat = b.get('center', {}).get('lat') or b.get('centro_lat')
+            lon = b.get('center', {}).get('lon') or b.get('centro_lon')
+            geo = b.get('geometry') or b.get('geometria')
+
+            if lat and lon:
+                final_points.append({
+                    'latitude': lat,
+                    'longitude': lon,
+                    'type': 'building',
+                    'geometria': geo
+                })
+
+    if not final_points:
+        print("Gerando Grid Matemático...")
+        final_points = generate_grid_points(center_lat, center_lon, radius_km)
+
+    # 3. Fallback de Emergência (Se tudo falhar, gera aleatório)
+    if not final_points:
+        print("Fallback Emergência...")
+        for _ in range(20):
+            final_points.append({
+                'latitude': center_lat + random.uniform(-0.005, 0.005),
+                'longitude': center_lon + random.uniform(-0.005, 0.005),
+                'type': 'random',
+                'geometria': []
+            })
+
+    return final_points

@@ -1,28 +1,22 @@
-# Framework da Aplicação (Site)
-streamlit-folium==0.17.0
-folium==0.15.1
-streamlit==1.41.0
+# Core - Versões mais recentes e estáveis
+streamlit>=1.29.0
+python-dotenv>=1.0.0
 
-# Manipulação de Dados
-pandas==2.2.0
-numpy==1.26.0
+# HTTP e APIs
+requests>=2.31.0
 
-# Conexão com APIs e Internet
-requests==2.31.0
-pyngrok  # <--- NOVA (Essencial para o Colab)
+# Processamento de Imagens - Wheels disponíveis
+opencv-python>=4.8.0
+numpy>=1.24.0,<2.0.0
+Pillow>=10.0.0
 
-# Variáveis de Ambiente
-python-dotenv==1.0.0
+# Dados e Análise
+pandas>=2.0.0
 
-# Processamento de Imagem e IA
-Pillow==11.3.0
-opencv-python-headless==4.9.0.80
+# Visualização (Opcional - pode remover se não usar)
+folium>=0.15.0
+streamlit-folium>=0.15.0
+matplotlib>=3.8.0
 
-# Gráficos
-plotly==5.18.0
-
-# Inteligência Espacial (Geo)
-geopandas==0.14.2
-h3==3.7.6
-shapely==2.0.2
-rtree    
+# Utilitários
+tqdm>=4.66.0
