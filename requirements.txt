@@ -1,6 +1,7 @@
 # Framework da Aplicação (Site)
 streamlit-folium==0.17.0
 folium==0.15.1
+streamlit==1.41.0
 
 # Manipulação de Dados
 pandas==2.2.0
@@ -8,16 +9,20 @@ numpy==1.26.0
 
 # Conexão com APIs e Internet
 requests==2.31.0
+pyngrok  # <--- NOVA (Essencial para o Colab)
 
-# Variáveis de Ambiente (Para esconder as senhas/Keys)
+# Variáveis de Ambiente
 python-dotenv==1.0.0
 
-#Processamento de Imagem (Para a IA)
+# Processamento de Imagem e IA
 Pillow==11.3.0
-shapely==2.0.2
 opencv-python-headless==4.9.0.80
-streamlit==1.41.0
 
 # Gráficos
 plotly==5.18.0
 
+# Inteligência Espacial (Geo)
+geopandas==0.14.2
+h3==3.7.6
+shapely==2.0.2
+rtree    
