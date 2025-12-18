@@ -2,19 +2,17 @@ import requests
 import pandas as pd
 from shapely.geometry import Polygon
 import numpy as np
+import time
 
 
-def buscar_edificacoes_raio(lat_centro, lon_centro, raio_km=0.5):
-    """
-    Usa a API Overpass (OpenStreetMap) para buscar polígonos de prédios/casas
-    dentro de um raio específico.
-    """
-    overpass_url = "http://overpass-api.de/api/interpreter"
+def buscar_edificacoes_raio(lat_centro, lon_centro, raio_km=0.3):
+    # Lista de servidores para tentar (se um falhar, tenta o outro)
+    servers = [
+        "https://overpass-api.de/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
+    ]
 
-    # Raio em metros
     raio_metros = raio_km * 1000
-
-    # Query otimizada: Busca 'ways' (formas) que são 'building' (prédios)
     query = f"""
     [out:json][timeout:25];
     (
@@ -23,38 +21,52 @@ def buscar_edificacoes_raio(lat_centro, lon_centro, raio_km=0.5):
     out geom;
     """
 
-    try:
-        response = requests.get(overpass_url, params={'data': query})
-        data = response.json()
+    # Headers para não ser bloqueado (finge ser um browser)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': 'https://www.google.com/'
+    }
 
-        edificacoes = []
+    for server in servers:
+        try:
+            response = requests.get(server, params={'data': query}, headers=headers, timeout=30)
 
-        for element in data['elements']:
-            if 'geometry' in element:
-                # Reconstrói o polígono a partir dos pontos
-                coords = [(pt['lat'], pt['lon']) for pt in element['geometry']]
+            # Se deu sucesso (200) e é JSON válido
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    edificacoes = []
 
-                if len(coords) > 2:
-                    poly = Polygon(coords)
-                    # Cálculo geodésico simplificado de área (para latitudes do Brasil)
-                    # 1 grau ~ 111km. Isso é uma aproximação para hackathon.
-                    # Para precisão total usaria GeoPandas com projeção UTM, mas é pesado.
-                    lat_factor = 111132.95
-                    lon_factor = 111412.84 * np.cos(np.radians(lat_centro))
+                    if 'elements' not in data:
+                        return pd.DataFrame()
 
-                    # Converte área de graus² para metros²
-                    area_m2 = poly.area * lat_factor * lon_factor
+                    for element in data['elements']:
+                        if 'geometry' in element:
+                            coords = [(pt['lat'], pt['lon']) for pt in element['geometry']]
+                            if len(coords) > 2:
+                                poly = Polygon(coords)
+                                # Estimativa de área
+                                area_m2 = poly.area * 111132.95 * (111132.95 * np.cos(np.radians(lat_centro)))
 
-                    edificacoes.append({
-                        'id': element['id'],
-                        'centro_lat': coords[0][0],  # Pega um ponto do telhado
-                        'centro_lon': coords[0][1],
-                        'area_m2': abs(area_m2),
-                        'geometria': coords  # Guarda o desenho para o mapa
-                    })
+                                edificacoes.append({
+                                    'id': element['id'],
+                                    'centro_lat': coords[0][0],
+                                    'centro_lon': coords[0][1],
+                                    'area_m2': abs(area_m2),
+                                    'geometria': coords
+                                })
 
-        return pd.DataFrame(edificacoes)
+                    return pd.DataFrame(edificacoes)
 
-    except Exception as e:
-        print(f"Erro ao buscar edificações: {e}")
-        return pd.DataFrame()
+                except ValueError:
+                    print(f"Erro JSON no servidor {server}. Tentando próximo...")
+                    continue
+            else:
+                print(f"Erro {response.status_code} no servidor {server}")
+
+        except Exception as e:
+            print(f"Timeout ou erro de conexão no servidor {server}: {e}")
+            time.sleep(1)  # Espera um pouco antes de tentar o próximo
+
+    print("ERRO CRÍTICO: Não foi possível baixar edificações de nenhum servidor.")
+    return pd.DataFrame()
