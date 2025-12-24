@@ -1,26 +1,50 @@
+import os
 from ultralytics import YOLO
 
-def main():
-    # 1. Carregar o modelo
-    # 'yolov8n.pt' = Nano (Rapidão, menos preciso)
-    # 'yolov8m.pt' = Medium (Equilíbrio perfeito pra sua RTX 5060)
-    print("Carregando modelo...")
-    model = YOLO('yolov8m.pt')
 
-    # 2. Treinar
-    # data: TEM QUE SER O CAMINHO para o seu arquivo data.yaml
-    # epochs: 100 rodadas (se demorar muito, pode parar antes)
-    # imgsz: 640 é o padrão
-    # device: 0 (Isso força o uso da sua NVIDIA RTX)
-    print("Iniciando treinamento na CPU (Modo de Compatibilidade)...")
-    model.train(
-        data=r'C:\Users\migue\OneDrive\Documentos\deploy\Plataforma-de-Varredura-Geoespacial\dataset_solar\data.yaml',
-        epochs=100,  # Pode voltar pra 100, a GPU aguenta!
-        imgsz=640,
-        device=0,  # <--- AQUI! Volte para 0 (Zero) para usar a RTX 2050
-        batch=8,  # Mantenha 8 ou 16 (A 2050 tem 4GB de VRAM, 16 pode estourar)
-        name='modelo_hackathon_gpu'
-    )
+def main():
+    # --- CONFIGURAÇÕES ---
+    caminho_modelo = r"C:\Users\Miguel Lucas\PycharmProjects\radix\models\solar_v1.pt"
+
+    pasta_imagens = r"C:\Users\Miguel Lucas\PycharmProjects\radix\dataset_solar\valid\images"
+
+    print("🧠 Carregando o cérebro da IA...")
+    model = YOLO(caminho_modelo)
+
+    if not os.path.exists(pasta_imagens):
+        print(f"❌ Erro: A pasta '{pasta_imagens}' não existe.")
+        return
+
+    arquivos = os.listdir(pasta_imagens)
+
+    imagens = [f for f in arquivos if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+
+    print(f"📂 Encontrei {len(imagens)} imagens para analisar. Começando agora!\n")
+
+    for i, imagem_nome in enumerate(imagens):
+        caminho_completo = os.path.join(pasta_imagens, imagem_nome)
+
+        results = model.predict(source=caminho_completo, save=True, device='cpu', conf=0.25, verbose=False)
+
+        resultado = results[0]
+        qtd_paineis = len(resultado.boxes)
+
+        # --- RELATÓRIO INDIVIDUAL ---
+        print(f"[{i + 1}/{len(imagens)}] Arquivo: {imagem_nome}")
+        print(f"   ☀️  Painéis: {qtd_paineis}")
+
+        if qtd_paineis > 20:
+            print("   🏭 Tipo: INDÚSTRIA / COMÉRCIO")
+        elif qtd_paineis > 0:
+            print("   🏠 Tipo: RESIDENCIAL")
+        else:
+            print("   ❌ Nada detectado")
+
+        print("-" * 30)
+
+    print("\n✅ FIM DA ANÁLISE!")
+    print("As imagens com os quadrados desenhados estão na pasta 'runs/detect/predict'.")
+
 
 if __name__ == '__main__':
     main()

@@ -29,4 +29,4 @@ data/*.json
 # Mac OS
 .DS_Store
 
-./runs
+runs/
