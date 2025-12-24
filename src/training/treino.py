@@ -14,12 +14,12 @@ def main():
     # device: 0 (Isso força o uso da sua NVIDIA RTX)
     print("Iniciando treinamento na CPU (Modo de Compatibilidade)...")
     model.train(
-        data=r"C:\Users\Miguel Lucas\PycharmProjects\radix\dataset_solar\data.yaml",  # Seu caminho absoluto
-        epochs=50,  # Reduzi para 50 pra acabar rápido
+        data=r'C:\Users\migue\OneDrive\Documentos\deploy\Plataforma-de-Varredura-Geoespacial\dataset_solar\data.yaml',
+        epochs=100,  # Pode voltar pra 100, a GPU aguenta!
         imgsz=640,
-        device='cpu',  # <--- O SEGREDO ESTÁ AQUI. Mude para 'cpu' (com aspas)
-        batch=8,  # Batch menor para não travar o PC
-        name='modelo_hackathon_cpu'
+        device=0,  # <--- AQUI! Volte para 0 (Zero) para usar a RTX 2050
+        batch=8,  # Mantenha 8 ou 16 (A 2050 tem 4GB de VRAM, 16 pode estourar)
+        name='modelo_hackathon_gpu'
     )
 
 if __name__ == '__main__':
