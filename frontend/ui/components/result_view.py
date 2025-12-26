@@ -19,9 +19,8 @@ def render_results_view(results_ia, raio_km):
     total_analisado = len(results_ia)
     gds_detectadas = sum(1 for r in results_ia if r.get('tem_gd', False))
 
-    area_coberta = 3.14159 * (raio_km ** 2)
-
-    potencia_estimada_mw = (gds_detectadas * 4.0) / 1000
+    soma_potencia_kw = sum(r.get('potencia_kw', 0) for r in results_ia)
+    potencia_estimada_mw = soma_potencia_kw / 1000.0
 
     capacidade_subestacao = 5.0
     penetracao_gd = (potencia_estimada_mw / capacidade_subestacao) * 100

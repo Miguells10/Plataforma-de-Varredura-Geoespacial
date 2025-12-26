@@ -1,5 +1,5 @@
 import streamlit as st
-from src.services.osm_service import buscar_subestacoes_osm
+from backend.modules.ingestion.osm_service import buscar_subestacoes_osm
 
 
 def render_sidebar():

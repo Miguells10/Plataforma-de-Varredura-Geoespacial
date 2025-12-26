@@ -6,7 +6,7 @@ def main():
     # --- CONFIGURAÇÕES ---
     caminho_modelo = r"C:\Users\Miguel Lucas\PycharmProjects\radix\models\solar_v1.pt"
 
-    pasta_imagens = r"C:\Users\Miguel Lucas\PycharmProjects\radix\dataset_solar\valid\images"
+    pasta_imagens = r"C:\Users\Miguel Lucas\PycharmProjects\radix\data\dataset_solar\train\images"
 
     print("🧠 Carregando o cérebro da IA...")
     model = YOLO(caminho_modelo)
